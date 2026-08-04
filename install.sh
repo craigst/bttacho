@@ -61,7 +61,7 @@ EOF
 done
 
 # -------------------------------------------------------- provision postgres --
-if [[ "$PROVISION_POSTGRES" == true ]]; then
+provision_postgres() {
     [[ -n "$POSTGRES_ADMIN_SSH" ]] || die "--provision-postgres needs --postgres-admin-ssh USER@HOST"
     [[ -n "$POSTGRES_HOST" ]] || die "--provision-postgres also needs --postgres-host HOST"
     PG_DB="$POSTGRES_DATABASE"
@@ -90,7 +90,7 @@ echo "  privileges granted"
 REMOTE_SCRIPT
     export TACHO_POSTGRES_PASSWORD="$PW"
     ok "database account created; configuring this service next"
-fi
+}
 
 bold "Installing tacho from $REPO"
 
@@ -123,9 +123,12 @@ if ! "$PY" -c 'import psycopg' 2>/dev/null; then
     warn "psycopg missing — setting up project venv"
     VENV="$REPO/venv"
     if [[ ! -d "$VENV" ]]; then
-        "$PY" -m venv "$VENV"
+        "$PY" -m venv --system-site-packages "$VENV"
         ok "venv created at $VENV"
     fi
+    # The service intentionally reuses distro packages for PC/SC and Qt while
+    # installing only psycopg in this private venv.
+    sed -i 's/^include-system-site-packages = .*/include-system-site-packages = true/' "$VENV/pyvenv.cfg"
     "$VENV/bin/pip" install --quiet "psycopg[binary]>=3.2.0"
     ok "psycopg installed in venv"
     PY="$VENV/bin/python3"
@@ -158,6 +161,10 @@ Config.load()
 "
     chmod 600 "$CONFIG_DIR/config.json"
     ok "config written to $CONFIG_DIR/config.json (0600)"
+fi
+
+if [[ "$PROVISION_POSTGRES" == true ]]; then
+    provision_postgres
 fi
 
 if [[ -n "$POSTGRES_HOST" ]]; then

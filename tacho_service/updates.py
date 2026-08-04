@@ -330,6 +330,7 @@ class UpdateManager:
             self._state("DEFERRED", "card or delivery is active")
             return
         self._state("AVAILABLE", f"v{manifest.version}")
+        self._state("DOWNLOADING", f"v{manifest.version}")
         with urllib.request.urlopen(urllib.request.Request(manifest.artifact_url),
                                     timeout=30) as response:
             if urlparse(response.geturl()).hostname not in GITHUB_HOSTS:
@@ -337,7 +338,6 @@ class UpdateManager:
             archive = response.read(MAX_RELEASE_BYTES + 1)
         if len(archive) > MAX_RELEASE_BYTES:
             raise UpdateError("release artifact is too large")
-        self._state("DOWNLOADING", f"v{manifest.version}")
         version_dir = self._store.stage_archive(manifest, archive)
         self._staged = (manifest, version_dir)
         self._state("VERIFIED", f"v{manifest.version}")

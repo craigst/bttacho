@@ -5,7 +5,9 @@ come from the system theme. Hierarchy is built from spacing and font weight,
 not from painted chrome.
 """
 
-from typing import List, Optional
+from datetime import datetime, timezone
+from typing import List, Optional, Tuple
+from zoneinfo import ZoneInfo
 
 from PyQt6.QtCore import QEasingCurve, Qt, QVariantAnimation, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QPalette
@@ -21,8 +23,43 @@ OK = "#2ecc71"
 WARN = "#e67e22"
 ERR = "#e74c3c"
 
-ROW_HEIGHT = 34
+UK_TIMEZONE = ZoneInfo("Europe/London")
+
+ROW_HEIGHT = 46
 HEADER_HEIGHT = 30
+
+
+def _local_trip_time(date: str, clock: str):
+    """Turn a card's UTC date/time pair into a UK civil-time datetime.
+
+    Tachograph card records are always UTC.  This is deliberately a display
+    conversion only: the ``TripRecord`` and its serialized SQL/webhook payload
+    retain the original UTC values.
+    """
+    if clock == "--:--":
+        return None
+    try:
+        raw = datetime.strptime(f"{date} {clock}", "%Y-%m-%d %H:%M")
+    except (TypeError, ValueError):
+        return None
+    return raw.replace(tzinfo=timezone.utc).astimezone(UK_TIMEZONE)
+
+
+def _trip_display(t: TripRecord) -> Tuple[str, str]:
+    """Return the local date label and a two-line UK/UTC time range."""
+    start = _local_trip_time(t.date, t.card_in_time)
+    end = _local_trip_time(t.date, t.card_out_time)
+
+    if start is None:
+        return t.date, f"{t.card_in_time} UTC"
+
+    pretty_date = start.strftime("%a %d %b")
+    local = start.strftime("%H:%M %Z")
+    source = f"{t.card_in_time} UTC"
+    if end is not None:
+        local = f"{local} → {end.strftime('%H:%M %Z')}"
+        source = f"{source} → {t.card_out_time} UTC"
+    return pretty_date, f"{local}\n{source}"
 
 
 def _dim(w: QWidget) -> QWidget:
@@ -49,7 +86,7 @@ class CardWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Tacho // Card Link")
-        self.setMinimumWidth(540)
+        self.setMinimumWidth(680)
         self.setStyleSheet("""
           QWidget { background: #080d13; color: #d9eef8; font-size: 12px; }
           QLabel#eyebrow { color: #4dcfff; font-size: 10px; font-weight: 700;
@@ -144,8 +181,9 @@ class CardWindow(QWidget):
         root.addSpacing(12)
 
         # -- trips -----------------------------------------------------------
-        self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["Date", "Vehicle", "Hours", "Distance"])
+        self.table = QTableWidget(0, 5)
+        self.table.setHorizontalHeaderLabels(
+            ["Date (UK)", "Time (UK / UTC)", "Vehicle", "Hours", "Distance"])
         self.table.verticalHeader().setVisible(False)
         self.table.verticalHeader().setDefaultSectionSize(ROW_HEIGHT)
         self.table.setShowGrid(False)
@@ -158,10 +196,11 @@ class CardWindow(QWidget):
         self.table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         hh = self.table.horizontalHeader()
-        hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        hh.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        hh.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        hh.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         hh.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         hh.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        hh.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
         hh.setHighlightSections(False)
         hh.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft
                                | Qt.AlignmentFlag.AlignVCenter)
@@ -320,18 +359,18 @@ class CardWindow(QWidget):
     def _fill(self, trips: List[TripRecord]):
         self.table.setRowCount(len(trips))
         for r, t in enumerate(trips):
-            try:
-                from datetime import datetime
-                pretty = datetime.strptime(t.date, "%Y-%m-%d").strftime("%a %d %b")
-            except ValueError:
-                pretty = t.date
-            cells = [pretty, t.vehicle_registration,
+            pretty_date, times = _trip_display(t)
+            cells = [pretty_date, times, t.vehicle_registration,
                      f"{t.driving_hours:.1f}", f"{t.distance_km:,} km"]
             for c, text in enumerate(cells):
                 item = QTableWidgetItem(text)
-                if c >= 2:
+                if c >= 3:
                     item.setTextAlignment(Qt.AlignmentFlag.AlignRight
                                           | Qt.AlignmentFlag.AlignVCenter)
+                elif c == 1:
+                    item.setToolTip(
+                        "Top line: UK local time (GMT/BST). Bottom line: "
+                        "unaltered UTC recorded by the tachograph.")
                 self.table.setItem(r, c, item)
 
         for r in range(len(trips)):

@@ -6,7 +6,9 @@ truncate the file.
 """
 
 import json
+import hashlib
 import os
+import re
 import shutil
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
@@ -84,6 +86,7 @@ class Config:
     # Public Ed25519 key, base64url encoded. It is intentionally empty until
     # the operator provisions the release-signing key for this installation.
     update_public_key: str = ""
+    trusted_card_hash: str = ""
     destinations: List[Destination] = field(default_factory=list)
 
     # ------------------------------------------------------------------- io
@@ -133,6 +136,16 @@ class Config:
 
     def enabled_destinations(self) -> List[Destination]:
         return [d for d in self.destinations if d.enabled and d.configured()]
+
+    @staticmethod
+    def card_hash(card_number: str) -> str:
+        """Hash the card identifier without storing or logging the raw number."""
+        normalized = re.sub(r"[^A-Za-z0-9]", "", str(card_number)).upper()
+        return hashlib.sha256(normalized.encode("ascii")).hexdigest()
+
+    def card_is_trusted(self, card_number: str) -> bool:
+        return bool(self.trusted_card_hash and
+                    self.card_hash(card_number) == self.trusted_card_hash)
 
 
 def _placeholder_destination() -> Destination:

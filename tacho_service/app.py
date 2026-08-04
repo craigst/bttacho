@@ -84,6 +84,7 @@ class Service(QObject):
         self.updater = UpdateManager(
             config_fn=lambda: self.config,
             idle_fn=self._update_idle,
+            authorized_fn=self._update_authorized,
             on_state=lambda state, detail: self._update_status.emit(state, detail),
         )
         self.watcher = cardwatch.CardWatcher(self._on_insert, self._on_remove)
@@ -200,6 +201,7 @@ class Service(QObject):
         if s is None:
             return
         s.report = report
+        self.updater.notify_card_authorized()
 
         self.window.show_report(report, self.config.preview_trips,
                                 self.config.send_window_days)
@@ -211,6 +213,12 @@ class Service(QObject):
             self.tray.set_state("idle")
             return
 
+        if not self.config.card_is_trusted(report.card_number):
+            self.window.set_delivery("● Card not trusted — upload blocked", "#e74c3c")
+            self.tray.set_state("error", "Tacho — card not trusted; upload blocked")
+            self._refresh_footer()
+            return
+
         s.batch_id = self.outbox.enqueue(
             report.to_payload(), dests,
             ddd_path=ddd_path, driver_name=report.driver_name,
@@ -219,11 +227,11 @@ class Service(QObject):
 
         if self.config.auto_sync:
             s.held = False
-            self.window.set_delivery("● Sending…", None)
+            self.window.set_delivery("● Card accepted — Sending…", None)
             self.dispatcher.poke()
         else:
             s.held = True
-            self.window.set_delivery("● Held — auto-sync is off", "#e67e22")
+            self.window.set_delivery("● Card accepted — held (auto-sync is off)", "#e67e22")
             self.tray.set_state("pending", "Tacho — deliveries held")
         self._refresh_footer()
 
@@ -252,6 +260,7 @@ class Service(QObject):
 
     def _sync_delivery_state(self):
         """Delivery outcomes arrived; reconcile window, tray and notifications."""
+        self.updater.notify_card_authorized()
         s = self.session
         counts = self.outbox.counts()
         pending = counts.get(PENDING, 0) + counts.get(SENDING, 0)
@@ -306,13 +315,19 @@ class Service(QObject):
 
     def _update_idle(self) -> bool:
         """Only update when no card I/O or delivery can be interrupted."""
-        if self.session and self.session.card_present:
+        if self.session and self.session.card_present and self.session.report is None:
             return False
         counts = self.outbox.counts()
         return not (counts.get(PENDING, 0) or counts.get(SENDING, 0))
 
+    def _update_authorized(self) -> bool:
+        """A successfully read, still-present card authorizes local apply."""
+        return bool(self.session and self.session.card_present and self.session.report)
+
     def _on_update_status(self, state: str, detail: str):
         """Translate updater worker events onto the Qt HUD/tray."""
+        if state in {"AVAILABLE", "VERIFIED", "STAGED", "COUNTDOWN"}:
+            self._show_window()
         self.window.set_update_status(state, detail)
         self.tray.set_update_status(state, detail)
 

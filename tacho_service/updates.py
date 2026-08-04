@@ -44,6 +44,7 @@ DEFAULT_MANIFEST_URL = (
     "https://raw.githubusercontent.com/craigst/bttacho/main/update-manifest.json"
 )
 DEFAULT_POLL_SECONDS = 600
+AUTO_APPLY_DELAY_SECONDS = 30
 MAX_RELEASE_BYTES = 100 * 1024 * 1024
 VERSION_RE = re.compile(r"^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:[-+].*)?$")
 GITHUB_HOSTS = {"github.com", "objects.githubusercontent.com",
@@ -242,9 +243,11 @@ class UpdateManager:
     """Background checker; callbacks are invoked from its worker thread."""
 
     def __init__(self, *, config_fn: Callable[[], object], idle_fn: Callable[[], bool],
+                 authorized_fn: Optional[Callable[[], bool]] = None,
                  on_state: Optional[Callable[[str, str], None]] = None):
         self._config = config_fn
         self._idle = idle_fn
+        self._authorized = authorized_fn or (lambda: False)
         self._on_state = on_state
         self._stop = threading.Event()
         self._wake = threading.Event()
@@ -253,6 +256,10 @@ class UpdateManager:
         self._store = ReleaseStore()
         self._etag_path = DATA_DIR / "update-manifest.etag"
         self._manual_check = threading.Event()
+
+    def notify_card_authorized(self):
+        """Wake the worker so a staged update can use the approved card."""
+        self._wake.set()
 
     def _state(self, state: str, detail: str = ""):
         if self._on_state:
@@ -279,6 +286,10 @@ class UpdateManager:
     def _run(self):
         while not self._stop.is_set():
             try:
+                cfg = self._config()
+                if (self._staged and getattr(cfg, "update_auto_apply", True)
+                        and self._authorized() and self._idle()):
+                    self._countdown(self._staged[0].version)
                 forced = self._manual_check.is_set()
                 self._manual_check.clear()
                 self.check_once(force=forced)
@@ -341,10 +352,27 @@ class UpdateManager:
         version_dir = self._store.stage_archive(manifest, archive)
         self._staged = (manifest, version_dir)
         self._state("VERIFIED", f"v{manifest.version}")
-        if getattr(cfg, "update_auto_apply", True) and self._idle():
+        if (getattr(cfg, "update_auto_apply", True) and self._idle()
+                and self._authorized()):
+            self._countdown(manifest.version)
+        else:
+            self._state("STAGED", f"v{manifest.version} waiting for approved card")
+
+    def _countdown(self, version: str) -> None:
+        """Give the operator a visible cancellation window before restart."""
+        for remaining in range(AUTO_APPLY_DELAY_SECONDS, 0, -1):
+            if self._stop.is_set():
+                return
+            if not self._idle():
+                self._state("DEFERRED", "card or delivery became active")
+                return
+            self._state("COUNTDOWN", f"v{version} auto-update in {remaining}s")
+            self._wake.wait(1)
+            self._wake.clear()
+        if self._idle():
             self.apply_staged()
         else:
-            self._state("STAGED", f"v{manifest.version}")
+            self._state("DEFERRED", "card or delivery became active")
 
     def apply_staged(self):
         if not self._staged:

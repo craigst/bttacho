@@ -82,6 +82,26 @@ class SettingsDialog(QDialog):
         self.notify_ok.setChecked(self.config.notify_on_success)
         form.addRow("", self.notify_ok)
 
+        self.auto_update = QCheckBox("Check for signed app updates automatically")
+        self.auto_update.setChecked(self.config.auto_update)
+        form.addRow("", self.auto_update)
+
+        self.update_apply = QCheckBox("Apply verified updates when the service is idle")
+        self.update_apply.setChecked(self.config.update_auto_apply)
+        form.addRow("", self.update_apply)
+
+        self.update_poll = QSpinBox()
+        self.update_poll.setRange(5, 15)
+        self.update_poll.setSuffix(" minutes")
+        self.update_poll.setValue(self.config.update_poll_minutes)
+        form.addRow("Update check", self.update_poll)
+
+        self.update_key = QLineEdit()
+        self.update_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.update_key.setPlaceholderText("Ed25519 public key (base64url)")
+        self.update_key.setText(self.config.update_public_key)
+        form.addRow("Update key", self.update_key)
+
         note = QLabel("Card downloads are always saved locally, whether or not "
                       "they are sent.")
         note.setWordWrap(True)
@@ -320,6 +340,10 @@ class SettingsDialog(QDialog):
         c.retry_limit_hours = self.retry_hours.value()
         c.notify_on_failure = self.notify_fail.isChecked()
         c.notify_on_success = self.notify_ok.isChecked()
+        c.auto_update = self.auto_update.isChecked()
+        c.update_auto_apply = self.update_apply.isChecked()
+        c.update_poll_minutes = self.update_poll.value()
+        c.update_public_key = self.update_key.text().strip()
         c.destinations = self._working
         c.save()
         self.accept()

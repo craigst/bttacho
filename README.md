@@ -41,6 +41,29 @@ Provisioning never rotates an existing account: use a unique `--postgres-user` p
 The tray badge is green only when a real authenticated PostgreSQL health check succeeds. Amber
 means reading/syncing, and red means the database or delivery is unavailable.
 
+## Signed app updates
+
+Installed trays can poll GitHub Releases for signed application-code updates. Updates are staged
+outside the active process, wait until the reader and delivery queue are idle, then switch an
+atomic release pointer and restart `tacho.service`. A failed startup/SQL health check rolls back
+to the previous release. Credentials, card policy, `.ddd` downloads, and the SQLite outbox are
+never replaced.
+
+The updater remains disabled until an Ed25519 public key is entered in Settings. To publish a
+release, keep the private key off GitHub and generate a manifest for the release asset:
+
+```bash
+python3 scripts/sign-release.py tacho-1.0.1.tar.gz 1.0.1 \
+  https://github.com/craigst/bttacho/releases/download/v1.0.1/tacho-1.0.1.tar.gz \
+  --private-key ~/.config/tacho/release-signing-key.pem \
+  --output update-manifest.json
+```
+
+Publish the signed `update-manifest.json` on the repository's `main` branch and attach the exact
+archive at the signed GitHub Release URL. Then enter the printed base64url public key in the tray
+Settings. The tray reports `CHECKING`, `VERIFIED`, `STAGED`, `APPLIED`, or `ROLLED BACK` separately
+from card-sync status.
+
 ## Requirements
 
 - `pcscd` (PC/SC daemon)

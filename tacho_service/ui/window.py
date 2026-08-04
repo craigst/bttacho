@@ -221,6 +221,12 @@ class CardWindow(QWidget):
         root.addSpacing(8)
         root.addWidget(self.delivery)
 
+        self.update_status = QLabel()
+        self.update_status.setObjectName("telemetry")
+        self.update_status.setVisible(False)
+        root.addSpacing(4)
+        root.addWidget(self.update_status)
+
         # -- footer ----------------------------------------------------------
         root.addSpacing(12)
         root.addWidget(Divider())
@@ -246,6 +252,8 @@ class CardWindow(QWidget):
         self._stop_pulse()
         self.delivery.setText("")
         self.delivery.hide()
+        self.update_status.setText("")
+        self.update_status.hide()
         self._show_idle()
         self.driver.setText("—")
         self.progress.setRange(0, 100)
@@ -307,6 +315,38 @@ class CardWindow(QWidget):
             self.delivery.setText(f"● {detail or 'SQL not checked'}")
             self.delivery.setStyleSheet("color: #7a9caf;")
         self.delivery.show()
+
+    def set_update_status(self, state: str, detail: str = ""):
+        """Show update activity separately from card delivery truth."""
+        labels = {
+            "CHECKING": "UPDATE // CHECKING",
+            "AVAILABLE": "UPDATE // AVAILABLE",
+            "DOWNLOADING": "UPDATE // DOWNLOADING",
+            "VERIFIED": "UPDATE // VERIFIED",
+            "STAGED": "UPDATE // STAGED",
+            "DEFERRED": "UPDATE // DEFERRED",
+            "APPLYING": "UPDATE // APPLYING",
+            "APPLIED": "UPDATE // APPLIED",
+            "VALIDATED": "UPDATE // GREEN",
+            "ROLLED_BACK": "UPDATE // ROLLED BACK",
+            "CURRENT": "UPDATE // CURRENT",
+            "DISABLED": "UPDATE // DISABLED",
+            "CHECK_FAILED": "UPDATE // CHECK FAILED",
+        }
+        colours = {
+            "AVAILABLE": "#e6b84d", "DOWNLOADING": "#4dcfff",
+            "VERIFIED": "#39e58c", "STAGED": "#39e58c",
+            "APPLYING": "#4dcfff", "APPLIED": "#39e58c",
+            "VALIDATED": "#39e58c", "ROLLED_BACK": "#ff5e70",
+            "CHECK_FAILED": "#ff5e70", "DEFERRED": "#e6b84d",
+        }
+        text = labels.get(state, f"UPDATE // {state}")
+        if detail:
+            text += f" · {detail}"
+        self.update_status.setText(text)
+        self.update_status.setStyleSheet(
+            f"color: {colours.get(state, '#7a9caf')};")
+        self.update_status.show()
 
     def show_reading(self, driver: Optional[str]):
         self._phase = "reading"

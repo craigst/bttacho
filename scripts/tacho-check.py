@@ -57,7 +57,8 @@ def check_python():
           f"{sys.executable} ({v.major}.{v.minor}.{v.micro})")
 
     for mod, why in [("smartcard", "pyscard — card I/O"),
-                     ("PyQt6", "tray + window")]:
+                     ("PyQt6", "tray + window"),
+                     ("cryptography", "signed app updates")]:
         spec = importlib.util.find_spec(mod)
         check(mod, PASS if spec else FAIL, why if spec else f"missing — {why}")
 

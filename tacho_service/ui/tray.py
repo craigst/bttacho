@@ -75,17 +75,22 @@ class Tray(QSystemTrayIcon):
         self.act_auto = QAction("Auto-sync")
         self.act_auto.setCheckable(True)
         self.act_settings = QAction("Settings…")
+        self.act_update_check = QAction("Check for updates")
         self.act_quit = QAction("Quit")
 
         self.status_action = QAction("Waiting for card")
         self.status_action.setEnabled(False)
+        self.update_action = QAction("Updates: not checked")
+        self.update_action.setEnabled(False)
 
         self.menu.addAction(self.status_action)
+        self.menu.addAction(self.update_action)
         self.menu.addSeparator()
         self.menu.addAction(self.act_show)
         self.menu.addAction(self.act_send)
         self.menu.addSeparator()
         self.menu.addAction(self.act_auto)
+        self.menu.addAction(self.act_update_check)
         self.menu.addAction(self.act_settings)
         self.menu.addSeparator()
         self.menu.addAction(self.act_quit)
@@ -120,3 +125,23 @@ class Tray(QSystemTrayIcon):
         icon = (QSystemTrayIcon.MessageIcon.Critical if error
                 else QSystemTrayIcon.MessageIcon.Information)
         self.showMessage(title, message, icon, 8000)
+
+    def set_update_status(self, state: str, detail: str = ""):
+        """Expose update state without changing the card/SQL badge."""
+        label = {
+            "CHECKING": "checking",
+            "AVAILABLE": "available",
+            "DOWNLOADING": "downloading",
+            "VERIFIED": "verified",
+            "STAGED": "staged",
+            "DEFERRED": "deferred",
+            "APPLYING": "applying",
+            "APPLIED": "applied",
+            "VALIDATED": "green",
+            "ROLLED_BACK": "rolled back",
+            "CURRENT": "current",
+            "DISABLED": "disabled",
+            "CHECK_FAILED": "check failed",
+        }.get(state, state.lower())
+        self.update_action.setText(
+            f"Updates: {label}" + (f" — {detail}" if detail else ""))

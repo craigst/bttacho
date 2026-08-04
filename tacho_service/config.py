@@ -77,6 +77,13 @@ class Config:
     backoff_ceiling_seconds: int = 1800
     notify_on_failure: bool = True
     notify_on_success: bool = False
+    auto_update: bool = True
+    update_auto_apply: bool = True
+    update_poll_minutes: int = 10
+    update_manifest_url: str = "https://raw.githubusercontent.com/craigst/bttacho/main/update-manifest.json"
+    # Public Ed25519 key, base64url encoded. It is intentionally empty until
+    # the operator provisions the release-signing key for this installation.
+    update_public_key: str = ""
     destinations: List[Destination] = field(default_factory=list)
 
     # ------------------------------------------------------------------- io

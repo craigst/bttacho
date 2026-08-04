@@ -11,6 +11,7 @@ UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 UNIT="$UNIT_DIR/tacho.service"
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/tacho"
 DESKTOP="${XDG_DATA_HOME:-$HOME/.local/share}/applications/tacho.desktop"
+RELEASE_CURRENT="${XDG_DATA_HOME:-$HOME/.local/share}/tacho/releases/current"
 POSTGRES_HOST=""
 POSTGRES_PORT="5432"
 POSTGRES_DATABASE="postgres"
@@ -119,8 +120,8 @@ else
 fi
 
 # psycopg (PostgreSQL driver) -- not in Arch repos, install via venv
-if ! "$PY" -c 'import psycopg' 2>/dev/null; then
-    warn "psycopg missing — setting up project venv"
+if ! "$PY" -c 'import psycopg, cryptography' 2>/dev/null; then
+    warn "psycopg/cryptography missing — setting up project venv"
     VENV="$REPO/venv"
     if [[ ! -d "$VENV" ]]; then
         "$PY" -m venv --system-site-packages "$VENV"
@@ -129,8 +130,8 @@ if ! "$PY" -c 'import psycopg' 2>/dev/null; then
     # The service intentionally reuses distro packages for PC/SC and Qt while
     # installing only psycopg in this private venv.
     sed -i 's/^include-system-site-packages = .*/include-system-site-packages = true/' "$VENV/pyvenv.cfg"
-    "$VENV/bin/pip" install --quiet "psycopg[binary]>=3.2.0"
-    ok "psycopg installed in venv"
+    "$VENV/bin/pip" install --quiet "psycopg[binary]>=3.2.0" "cryptography>=42.0.0"
+    ok "psycopg and cryptography installed in venv"
     PY="$VENV/bin/python3"
 fi
 
@@ -196,6 +197,11 @@ fi
 
 # ------------------------------------------------------------ systemd unit --
 mkdir -p "$UNIT_DIR"
+# Preserve an updater-managed release pointer when re-running the installer.
+SERVICE_ROOT="$REPO"
+if [[ -e "$RELEASE_CURRENT" || -L "$RELEASE_CURRENT" ]]; then
+    SERVICE_ROOT="$RELEASE_CURRENT"
+fi
 cat > "$UNIT" <<EOF
 [Unit]
 Description=Tacho driver card service
@@ -206,7 +212,7 @@ After=graphical-session.target
 
 [Service]
 Type=simple
-WorkingDirectory=$REPO
+WorkingDirectory=$SERVICE_ROOT
 ExecStart=$PY -m tacho_service
 Restart=on-failure
 RestartSec=5

@@ -19,6 +19,7 @@ from .config import Config, OUTBOX_PATH
 from .dispatch import Dispatcher
 from .outbox import DELIVERED, FAILED, HELD, PENDING, SENDING, Outbox
 from .ui import CardWindow, SettingsDialog, Tray
+from .updates import UpdateManager
 
 log = logging.getLogger(__name__)
 
@@ -63,6 +64,7 @@ class Service(QObject):
     _removed = pyqtSignal()
     _delivery_changed = pyqtSignal()
     _sql_health = pyqtSignal(object, str)
+    _update_status = pyqtSignal(str, str)
 
     def __init__(self, app: QApplication):
         super().__init__()
@@ -79,6 +81,11 @@ class Service(QObject):
                                      on_change=self._delivery_changed.emit,
                                      on_health=lambda ok, detail:
                                      self._sql_health.emit(ok, detail))
+        self.updater = UpdateManager(
+            config_fn=lambda: self.config,
+            idle_fn=self._update_idle,
+            on_state=lambda state, detail: self._update_status.emit(state, detail),
+        )
         self.watcher = cardwatch.CardWatcher(self._on_insert, self._on_remove)
 
         self._wire()
@@ -93,6 +100,7 @@ class Service(QObject):
         self._removed.connect(self._on_card_gone)
         self._delivery_changed.connect(self._sync_delivery_state)
         self._sql_health.connect(self._on_sql_health)
+        self._update_status.connect(self._on_update_status)
 
         self.tray.act_show.triggered.connect(self._show_window)
         self.tray.act_settings.triggered.connect(self._open_settings)
@@ -100,6 +108,7 @@ class Service(QObject):
         self.tray.act_quit.triggered.connect(self._quit)
         self.tray.act_auto.setChecked(self.config.auto_sync)
         self.tray.act_auto.toggled.connect(self._toggle_auto)
+        self.tray.act_update_check.triggered.connect(self.updater.check_now)
         self.tray.activated.connect(self._tray_activated)
 
         self.window.settings_requested.connect(self._open_settings)
@@ -108,6 +117,7 @@ class Service(QObject):
     def start(self):
         self.tray.show()
         self.dispatcher.start()
+        self.updater.start()
         self.watcher.start()
         if not cardwatch.reader_present():
             self.window.set_reader_state(False)
@@ -292,6 +302,19 @@ class Service(QObject):
         """Runs in the Qt thread after the dispatch worker's real DB probe."""
         self.tray.set_sql_status(online, f"Tacho — {detail}")
         self.window.set_sql_status(online, detail)
+        self.updater.validate_or_rollback(online)
+
+    def _update_idle(self) -> bool:
+        """Only update when no card I/O or delivery can be interrupted."""
+        if self.session and self.session.card_present:
+            return False
+        counts = self.outbox.counts()
+        return not (counts.get(PENDING, 0) or counts.get(SENDING, 0))
+
+    def _on_update_status(self, state: str, detail: str):
+        """Translate updater worker events onto the Qt HUD/tray."""
+        self.window.set_update_status(state, detail)
+        self.tray.set_update_status(state, detail)
 
     def _refresh_footer(self, queued: int = 0):
         self.window.set_sync_state(self.config.auto_sync,
@@ -356,6 +379,7 @@ class Service(QObject):
                 return
         self.watcher.stop()
         self.dispatcher.stop()
+        self.updater.stop()
         self.outbox.close()
         self.app.quit()
 

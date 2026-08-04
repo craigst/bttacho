@@ -63,8 +63,9 @@ done
 # -------------------------------------------------------- provision postgres --
 if [[ "$PROVISION_POSTGRES" == true ]]; then
     [[ -n "$POSTGRES_ADMIN_SSH" ]] || die "--provision-postgres needs --postgres-admin-ssh USER@HOST"
-    PG_DB="postgres"
-    PG_ROLE="tacho_writer"
+    [[ -n "$POSTGRES_HOST" ]] || die "--provision-postgres also needs --postgres-host HOST"
+    PG_DB="$POSTGRES_DATABASE"
+    PG_ROLE="$POSTGRES_USER"
     PG_TABLE="tacho_daily"
     PW=$(openssl rand -base64 32 | tr -dc 'A-Za-z0-9' | head -c32)
 
@@ -74,13 +75,12 @@ if [[ "$PROVISION_POSTGRES" == true ]]; then
     ssh "$POSTGRES_ADMIN_SSH" bash -s <<REMOTE_SCRIPT
 set -euo pipefail
 PG_CONTAINER="postgresql"
-if ! docker exec \$PG_CONTAINER psql -U postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname='$PG_ROLE'" | grep -q 1; then
-  docker exec \$PG_CONTAINER psql -U postgres -c "CREATE ROLE $PG_ROLE LOGIN PASSWORD '$PW';"
-  echo "  created role $PG_ROLE"
-else
-  docker exec \$PG_CONTAINER psql -U postgres -c "ALTER ROLE $PG_ROLE LOGIN PASSWORD '$PW';"
-  echo "  role $PG_ROLE exists — password rotated"
+if docker exec \$PG_CONTAINER psql -U postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname='$PG_ROLE'" | grep -q 1; then
+  echo "role $PG_ROLE already exists; choose a unique --postgres-user" >&2
+  exit 1
 fi
+docker exec \$PG_CONTAINER psql -U postgres -c "CREATE ROLE $PG_ROLE LOGIN PASSWORD '$PW';"
+echo "  created role $PG_ROLE"
 docker exec \$PG_CONTAINER psql -U postgres -c "GRANT CONNECT ON DATABASE $PG_DB TO $PG_ROLE;"
 docker exec \$PG_CONTAINER psql -U postgres -c "GRANT USAGE ON SCHEMA public TO $PG_ROLE;"
 docker exec \$PG_CONTAINER psql -U postgres -c "GRANT SELECT, INSERT ON public.$PG_TABLE TO $PG_ROLE;"
@@ -88,29 +88,8 @@ docker exec \$PG_CONTAINER psql -U postgres -c "GRANT UPDATE (trip_date, day_of_
 docker exec \$PG_CONTAINER psql -U postgres -c "GRANT USAGE ON SEQUENCE public.tacho_daily_id_seq TO $PG_ROLE;" 2>/dev/null || true
 echo "  privileges granted"
 REMOTE_SCRIPT
-
-    mkdir -p "$CONFIG_DIR"
-    CONFIG_FILE="$CONFIG_DIR/config.json"
-    if [[ -f "$CONFIG_FILE" ]]; then
-        "$PY" -c "
-import json, sys
-p = '$CONFIG_FILE'
-c = json.loads(open(p).read())
-for d in c.get('destinations', []):
-    if d.get('type') == 'postgres':
-        d['password'] = '$PW'
-        d['enabled'] = True
-        break
-with open(p, 'w') as f:
-    json.dump(c, f, indent=2)
-"
-        chmod 600 "$CONFIG_FILE"
-        ok "config updated with new password"
-    else
-        warn "no config at $CONFIG_FILE — run install.sh first to create it"
-    fi
-    ok "provisioning complete"
-    exit 0
+    export TACHO_POSTGRES_PASSWORD="$PW"
+    ok "database account created; configuring this service next"
 fi
 
 bold "Installing tacho from $REPO"

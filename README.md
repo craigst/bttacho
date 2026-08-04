@@ -20,12 +20,17 @@ TACHO_POSTGRES_PASSWORD='your-tacho-writer-password' ./install.sh \
 The password is supplied through an environment variable rather than an argument, so it is not
 stored in shell history. The resulting local configuration is mode `0600`.
 
-To create or rotate the restricted PostgreSQL account from a machine with SSH administration of
-the database host, add these arguments:
+To install a second computer and create a separate restricted account for it, use a unique
+database user and add the administration arguments in the same command:
 
 ```bash
-./install.sh --provision-postgres --postgres-admin-ssh root@your-postgres-host
+./install.sh --provision-postgres \
+  --postgres-admin-ssh root@your-postgres-host \
+  --postgres-host your-postgres-lan-ip \
+  --postgres-user tacho_writer_laptop
 ```
+
+Provisioning never rotates an existing account: use a unique `--postgres-user` per computer.
 
 The tray badge is green only when a real authenticated PostgreSQL health check succeeds. Amber
 means reading/syncing, and red means the database or delivery is unavailable.

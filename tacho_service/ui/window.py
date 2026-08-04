@@ -84,6 +84,7 @@ class Divider(QFrame):
 class CardWindow(QWidget):
     send_requested = pyqtSignal()
     settings_requested = pyqtSignal()
+    trust_requested = pyqtSignal()
 
     def __init__(self):
         super().__init__()
@@ -249,6 +250,12 @@ class CardWindow(QWidget):
         self.send_btn.setDefault(True)
         self.send_btn.clicked.connect(self.send_requested)
         foot.addWidget(self.send_btn)
+        self.trust_btn = QPushButton("Trust this card")
+        self.trust_btn.setToolTip(
+            "Allow this card to upload and authorize signed app updates on this laptop")
+        self.trust_btn.clicked.connect(self.trust_requested)
+        self.trust_btn.setVisible(False)
+        foot.addWidget(self.trust_btn)
         root.addLayout(foot)
 
     # ----------------------------------------------------------------- states
@@ -273,6 +280,7 @@ class CardWindow(QWidget):
         self.totals.setText("")
         self.totals.hide()
         self.send_btn.setEnabled(False)
+        self.trust_btn.hide()
 
     def _show_idle(self):
         if self._reader_connected:
@@ -407,6 +415,7 @@ class CardWindow(QWidget):
             f"{report.total_trips} trips · {total_miles:,} mi traveled · "
             f"{other_miles:,} mi other/unaccounted · {span}")
         self.send_btn.setEnabled(True)
+        self.trust_btn.hide()
 
     def _fill(self, trips: List[TripRecord], all_trips: List[TripRecord]):
         self.table.setRowCount(len(trips))
@@ -445,6 +454,16 @@ class CardWindow(QWidget):
             self._stop_pulse()
         self.set_status(text, colour)
 
+    def show_untrusted_card(self):
+        """Expose explicit local enrollment without hiding the report preview."""
+        self.send_btn.setEnabled(False)
+        self.trust_btn.show()
+
+    def set_card_trusted(self, trusted: bool = True):
+        """Update the enrollment action after a confirmed trust decision."""
+        self.trust_btn.setVisible(not trusted)
+        self.send_btn.setEnabled(trusted)
+
     def set_sync_state(self, auto_sync: bool, destinations: int, pending: int = 0):
         state = "on" if auto_sync else "off"
         bits = [f"Auto-sync {state}", f"{destinations} destination"
@@ -460,3 +479,4 @@ class CardWindow(QWidget):
         self.progress.setValue(0)
         self.stage.setText(message)
         self.send_btn.setEnabled(False)
+        self.trust_btn.hide()

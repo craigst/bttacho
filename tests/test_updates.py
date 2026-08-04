@@ -47,6 +47,23 @@ class UpdateTests(unittest.TestCase):
         self.assertTrue(config.card_is_trusted(card_number))
         self.assertFalse(config.card_is_trusted("GB 0000 0000 0000 0000"))
 
+    def test_trust_card_enrollment_round_trips_and_masks_identifier(self):
+        config = Config()
+        card_number = "DB 0719 2162 0387 02"
+        fingerprint = config.trust_card(card_number)
+        self.assertTrue(config.card_is_trusted("DB07192162038702"))
+        self.assertEqual(Config.masked_card_number(card_number), "••••8702")
+        self.assertEqual(len(fingerprint), 64)
+
+    def test_legacy_prefixed_or_uppercase_hash_remains_trusted(self):
+        card_number = "DB07192162038702"
+        config = Config(trusted_card_hash=" SHA256:" + Config.card_hash(card_number).upper())
+        self.assertTrue(config.card_is_trusted("DB 0719 2162 0387 02"))
+
+    def test_empty_trust_policy_does_not_trust_any_card(self):
+        config = Config()
+        self.assertFalse(config.card_is_trusted("DB07192162038702"))
+
     def test_mileage_gap_is_previous_truck_odometer_advance(self):
         older = TripRecord("2026-08-01", "Friday", "AB12", "06:00", "10:00",
                            1000, 1200, 200, 4.0)

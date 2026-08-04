@@ -114,6 +114,7 @@ class Service(QObject):
 
         self.window.settings_requested.connect(self._open_settings)
         self.window.send_requested.connect(self._flush)
+        self.window.trust_requested.connect(self._trust_current_card)
 
     def start(self):
         self.tray.show()
@@ -214,8 +215,10 @@ class Service(QObject):
             return
 
         if not self.config.card_is_trusted(report.card_number):
-            self.window.set_delivery("● Card not trusted — upload blocked", "#e74c3c")
-            self.tray.set_state("error", "Tacho — card not trusted; upload blocked")
+            self.window.set_delivery(
+                "● Card not trusted on this laptop — upload blocked", "#e74c3c")
+            self.window.show_untrusted_card()
+            self.tray.set_state("error", "Tacho — card not trusted; choose Trust this card")
             self._refresh_footer()
             return
 
@@ -322,7 +325,8 @@ class Service(QObject):
 
     def _update_authorized(self) -> bool:
         """A successfully read, still-present card authorizes local apply."""
-        return bool(self.session and self.session.card_present and self.session.report)
+        return bool(self.session and self.session.card_present and self.session.report
+                    and self.config.card_is_trusted(self.session.report.card_number))
 
     def _on_update_status(self, state: str, detail: str):
         """Translate updater worker events onto the Qt HUD/tray."""
@@ -372,6 +376,36 @@ class Service(QObject):
             self.session.held = False
         self.window.set_delivery("● Sending…", None)
         log.info("manual flush: released %s", released)
+
+    def _trust_current_card(self):
+        """Enroll the currently displayed card after an explicit confirmation."""
+        session = self.session
+        if not session or not session.report or not session.card_present:
+            self.window.set_delivery("● Keep the card inserted to trust it", "#e67e22")
+            return
+
+        card = session.report.card_number
+        masked = Config.masked_card_number(card)
+        answer = QMessageBox.question(
+            self.window,
+            "Trust this tachograph card?",
+            f"Trust card {masked} on this laptop?\n\n"
+            "This allows its reports to upload and permits signed app updates "
+            "while the card is present. The card number is not stored.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        self.config.trust_card(card)
+        self.config.save()
+        self.window.set_card_trusted(True)
+        self.window.set_delivery("● Card trusted on this laptop — Sending…", None)
+        # Re-enter the normal enqueue path now that the explicit local policy
+        # decision has been made. This also wakes the signed-update worker.
+        self.updater.notify_card_authorized()
+        self._on_report(session.report, None)
 
     def _open_settings(self):
         dlg = SettingsDialog(self.config, self.window

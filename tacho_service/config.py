@@ -7,6 +7,7 @@ truncate the file.
 
 import json
 import hashlib
+import hmac
 import os
 import re
 import shutil
@@ -138,14 +139,38 @@ class Config:
         return [d for d in self.destinations if d.enabled and d.configured()]
 
     @staticmethod
-    def card_hash(card_number: str) -> str:
+    def normalize_card_number(card_number: str) -> str:
+        """Return the stable identifier used for card policy decisions."""
+        return re.sub(r"[^A-Za-z0-9]", "", str(card_number)).upper()
+
+    @classmethod
+    def card_hash(cls, card_number: str) -> str:
         """Hash the card identifier without storing or logging the raw number."""
-        normalized = re.sub(r"[^A-Za-z0-9]", "", str(card_number)).upper()
+        normalized = cls.normalize_card_number(card_number)
         return hashlib.sha256(normalized.encode("ascii")).hexdigest()
 
     def card_is_trusted(self, card_number: str) -> bool:
-        return bool(self.trusted_card_hash and
-                    self.card_hash(card_number) == self.trusted_card_hash)
+        configured = str(self.trusted_card_hash or "").strip().lower()
+        # Accept the optional prefix and whitespace used by older/manual
+        # provisioning so an existing trust does not break on upgrade.
+        if configured.startswith("sha256:"):
+            configured = configured[7:].strip()
+        expected = self.card_hash(card_number)
+        return bool(re.fullmatch(r"[0-9a-f]{64}", configured) and
+                    hmac.compare_digest(expected, configured))
+
+    def trust_card(self, card_number: str) -> str:
+        """Trust one card on this machine and return its non-secret fingerprint."""
+        self.trusted_card_hash = self.card_hash(card_number)
+        return self.trusted_card_hash
+
+    @staticmethod
+    def masked_card_number(card_number: str) -> str:
+        """Display only the final four identifier characters in confirmation UI."""
+        normalized = Config.normalize_card_number(card_number)
+        if len(normalized) <= 4:
+            return "••••"
+        return f"••••{normalized[-4:]}"
 
 
 def _placeholder_destination() -> Destination:

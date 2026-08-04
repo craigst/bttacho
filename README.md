@@ -64,6 +64,14 @@ archive at the signed GitHub Release URL. Then enter the printed base64url publi
 Settings. The tray reports `CHECKING`, `VERIFIED`, `STAGED`, `APPLIED`, or `ROLLED BACK` separately
 from card-sync status.
 
+## Card trust on a new laptop
+
+Card trust is intentionally local to each laptop and is stored as a SHA-256 fingerprint,
+never as the card number. On a new installation the first card read may show `Card not trusted`.
+Keep that card inserted and choose **Trust this card** in the report window, then confirm. The
+same physical card can be enrolled independently on each laptop; existing fingerprints remain
+compatible across updates.
+
 ## Requirements
 
 - `pcscd` (PC/SC daemon)

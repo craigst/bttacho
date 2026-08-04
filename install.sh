@@ -145,7 +145,7 @@ fi
 
 # ------------------------------------------------------------- preflight ----
 bold "Preflight"
-if ! "$PY" "$REPO/scripts/tacho-check.py"; then
+if ! "$PY" "$REPO/scripts/tacho-check.py" --allow-no-reader; then
     die "preflight failed — fix the above before installing"
 fi
 

@@ -8,20 +8,26 @@ On a new Linux desktop, clone the repository and run the installer. It enables a
 systemd tray service, detects a supported PC/SC reader, saves card downloads locally for seven
 days, and upserts card trips directly to PostgreSQL.
 
+For Craig's zues deployment, a fresh reader computer needs only:
+
 ```bash
-git clone https://github.com/craigst/bttacho.git && cd bttacho
-TACHO_POSTGRES_PASSWORD='your-tacho-writer-password' ./install.sh \
-  --postgres-host your-postgres-lan-ip \
-  --postgres-port 5432 \
-  --postgres-database postgres \
-  --postgres-user tacho_writer
+git clone https://github.com/craigst/bttacho.git && cd bttacho && ./onboard-zues.sh
 ```
 
-The password is supplied through an environment variable rather than an argument, so it is not
-stored in shell history. The resulting local configuration is mode `0600`.
+The onboarding script retrieves the single shared `tacho_writer` password over authenticated
+root SSH, then writes the local configuration mode `0600`. The password never appears in shell
+history or terminal output.
 
-To install a second computer and create a separate restricted account for it, use a unique
-database user and add the administration arguments in the same command:
+For another PostgreSQL server, use the generic installer instead:
+
+```bash
+TACHO_POSTGRES_PASSWORD='your-tacho-writer-password' ./install.sh \
+  --postgres-host your-postgres-lan-ip \
+  --postgres-port 5432 --postgres-database postgres --postgres-user tacho_writer
+```
+
+To create an isolated account for another PostgreSQL deployment, use a unique database user and
+add the administration arguments in the same command:
 
 ```bash
 ./install.sh --provision-postgres \

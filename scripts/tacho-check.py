@@ -88,7 +88,7 @@ def check_pcsc():
     check("pcscd", INFO, f"{out} (socket-activated starts on demand)")
 
 
-def check_reader():
+def check_reader(allow_missing=False):
     section("Reader")
     try:
         from smartcard.System import readers
@@ -103,7 +103,8 @@ def check_reader():
         return []
 
     if not rl:
-        check("readers found", FAIL, "none — is the reader plugged in?")
+        check("readers found", WARN if allow_missing else FAIL,
+              "none — plug the reader in when ready")
         return []
 
     check("readers found", PASS, f"{len(rl)}")
@@ -250,6 +251,8 @@ def main():
     ap.add_argument("--show-identity", action="store_true",
                     help="print the driver name and card number in full "
                          "(personal data — do not paste the output publicly)")
+    ap.add_argument("--allow-no-reader", action="store_true",
+                    help="treat a missing reader as a warning (for installation)")
     args = ap.parse_args()
 
     global SHOW_IDENTITY
@@ -258,7 +261,7 @@ def main():
     print("\033[1mTacho service — preflight\033[0m")
     check_python()
     check_pcsc()
-    check_reader()
+    check_reader(args.allow_no_reader)
     check_desktop()
     if args.card:
         check_card(args.timeout)

@@ -1,0 +1,54 @@
+# ---------------------------------------------------------------------------
+# PERSONAL DATA — never commit. Tachograph downloads contain driver names,
+# card numbers, vehicle registrations and movement history (GDPR personal data).
+# ---------------------------------------------------------------------------
+*.ddd
+downloads/
+.cardpeek/replay/
+
+# Local configuration — contains destination URLs and auth tokens
+config.json
+config.local.*
+*.env
+.env
+
+# Runtime state
+outbox.sqlite3*
+*.sqlite3
+*.db
+
+# ---------------------------------------------------------------------------
+# Build artifacts and vendored trees
+# ---------------------------------------------------------------------------
+venv/
+.venv/
+build/
+dist/
+AppDir/
+*.AppImage
+appimagetool
+cardpeek-0.8.4/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# ---------------------------------------------------------------------------
+# Editor / OS
+# ---------------------------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store

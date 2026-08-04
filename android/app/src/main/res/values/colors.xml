@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="tacho_bg">#0A0F1A</color>
+    <color name="tacho_bg_alt">#121A2E</color>
+    <color name="tacho_accent">#00D4FF</color>
+    <color name="tacho_accent_2">#00FF88</color>
+    <color name="tacho_text">#D8F5FF</color>
+    <color name="tacho_muted">#6B8AA5</color>
+</resources>

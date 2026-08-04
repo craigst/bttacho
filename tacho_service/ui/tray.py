@@ -130,6 +130,7 @@ class Tray(QSystemTrayIcon):
         """Expose update state without changing the card/SQL badge."""
         label = {
             "CHECKING": "checking",
+            "COUNTDOWN": "auto-update countdown",
             "AVAILABLE": "available",
             "DOWNLOADING": "downloading",
             "VERIFIED": "verified",

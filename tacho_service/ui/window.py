@@ -17,6 +17,8 @@ from PyQt6.QtWidgets import (
 )
 
 from tacho_core import DriverReport, TripRecord
+from tacho_core.report import KM_TO_MILES, mileage_gap_km, total_unaccounted_km
+from tacho_service import __version__
 
 # Semantic colour is the only colour used; everything else is theme greyscale.
 OK = "#2ecc71"
@@ -146,6 +148,9 @@ class CardWindow(QWidget):
         self.protocol.setObjectName("telemetry")
         head.addSpacing(13)
         head.addWidget(self.protocol)
+        self.version = QLabel(f"APP v{__version__}")
+        self.version.setObjectName("telemetry")
+        head.addWidget(self.version)
         head.addStretch()
         self.status = QLabel()
         self.status.setObjectName("statusPill")
@@ -181,9 +186,10 @@ class CardWindow(QWidget):
         root.addSpacing(12)
 
         # -- trips -----------------------------------------------------------
-        self.table = QTableWidget(0, 5)
+        self.table = QTableWidget(0, 7)
         self.table.setHorizontalHeaderLabels(
-            ["Date (UK)", "Time (UK / UTC)", "Vehicle", "Hours", "Distance"])
+            ["Date (UK)", "Time (UK / UTC)", "Vehicle", "Start mi",
+             "End mi", "Miles", "Other mi"])
         self.table.verticalHeader().setVisible(False)
         self.table.verticalHeader().setDefaultSectionSize(ROW_HEIGHT)
         self.table.setShowGrid(False)
@@ -199,8 +205,8 @@ class CardWindow(QWidget):
         hh.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         hh.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         hh.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        hh.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        hh.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        for column in (3, 4, 5, 6):
+            hh.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
         hh.setHighlightSections(False)
         hh.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft
                                | Qt.AlignmentFlag.AlignVCenter)
@@ -320,6 +326,7 @@ class CardWindow(QWidget):
         """Show update activity separately from card delivery truth."""
         labels = {
             "CHECKING": "UPDATE // CHECKING",
+            "COUNTDOWN": "UPDATE // AUTO-UPDATE",
             "AVAILABLE": "UPDATE // AVAILABLE",
             "DOWNLOADING": "UPDATE // DOWNLOADING",
             "VERIFIED": "UPDATE // VERIFIED",
@@ -334,7 +341,8 @@ class CardWindow(QWidget):
             "CHECK_FAILED": "UPDATE // CHECK FAILED",
         }
         colours = {
-            "AVAILABLE": "#e6b84d", "DOWNLOADING": "#4dcfff",
+            "AVAILABLE": "#e6b84d", "COUNTDOWN": "#e6b84d",
+            "DOWNLOADING": "#4dcfff",
             "VERIFIED": "#39e58c", "STAGED": "#39e58c",
             "APPLYING": "#4dcfff", "APPLIED": "#39e58c",
             "VALIDATED": "#39e58c", "ROLLED_BACK": "#ff5e70",
@@ -390,18 +398,26 @@ class CardWindow(QWidget):
         self.table.show()
         self.totals.show()
 
-        self._fill(report.recent(preview))
+        recent = report.recent(preview)
+        self._fill(recent, report.trips)
         span = "all data" if window_days is None else f"last {window_days} days"
+        total_miles = round(report.total_distance_km * KM_TO_MILES)
+        other_miles = round(total_unaccounted_km(report.trips) * KM_TO_MILES)
         self.totals.setText(
-            f"{report.total_trips} trips · {report.total_distance_km:,} km · {span}")
+            f"{report.total_trips} trips · {total_miles:,} mi traveled · "
+            f"{other_miles:,} mi other/unaccounted · {span}")
         self.send_btn.setEnabled(True)
 
-    def _fill(self, trips: List[TripRecord]):
+    def _fill(self, trips: List[TripRecord], all_trips: List[TripRecord]):
         self.table.setRowCount(len(trips))
         for r, t in enumerate(trips):
             pretty_date, times = _trip_display(t)
+            gap_km = mileage_gap_km(all_trips, t)
+            gap = "—" if gap_km is None else f"{round(gap_km * KM_TO_MILES):,} mi"
             cells = [pretty_date, times, t.vehicle_registration,
-                     f"{t.driving_hours:.1f}", f"{t.distance_km:,} km"]
+                     f"{round(t.start_mileage * KM_TO_MILES):,}",
+                     f"{round(t.end_mileage * KM_TO_MILES):,}",
+                     f"{round(t.distance_km * KM_TO_MILES):,}", gap]
             for c, text in enumerate(cells):
                 item = QTableWidgetItem(text)
                 if c >= 3:

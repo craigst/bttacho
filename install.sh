@@ -10,6 +10,7 @@ PY=$(command -v python3 || true)
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 UNIT="$UNIT_DIR/tacho.service"
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/tacho"
+UPDATE_PUBLIC_KEY_FILE="$REPO/update-public-key.txt"
 DESKTOP="${XDG_DATA_HOME:-$HOME/.local/share}/applications/tacho.desktop"
 RELEASE_CURRENT="${XDG_DATA_HOME:-$HOME/.local/share}/tacho/releases/current"
 POSTGRES_HOST=""
@@ -162,6 +163,22 @@ Config.load()
 "
     chmod 600 "$CONFIG_DIR/config.json"
     ok "config written to $CONFIG_DIR/config.json (0600)"
+fi
+
+# The release public key is safe to ship.  Never replace a user's configured
+# key, but make fresh/older installs verify the official update channel.
+if [[ -s "$UPDATE_PUBLIC_KEY_FILE" ]]; then
+    TACHO_UPDATE_PUBLIC_KEY_FILE="$UPDATE_PUBLIC_KEY_FILE" \
+    "$PY" - <<'PY'
+import os
+from tacho_service.config import Config
+
+config = Config.load()
+if not config.update_public_key:
+    config.update_public_key = open(os.environ["TACHO_UPDATE_PUBLIC_KEY_FILE"], encoding="ascii").read().strip()
+    config.save()
+PY
+    ok "signed update key configured"
 fi
 
 if [[ "$PROVISION_POSTGRES" == true ]]; then

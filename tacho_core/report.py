@@ -5,6 +5,30 @@ from typing import Optional
 
 from .models import DriverReport, TripRecord
 
+KM_TO_MILES = 0.621371
+
+
+def mileage_gap_km(trips, trip) -> int | None:
+    """Return miles driven since this truck's previous card record.
+
+    A positive gap means the odometer advanced between this card's previous
+    record and this record, so the distance was not attributed to this card.
+    ``None`` means the previous record is not available in ``trips``.
+    """
+    try:
+        index = next(i for i, candidate in enumerate(trips) if candidate is trip)
+    except StopIteration:
+        return None
+    for older in trips[index + 1:]:
+        if older.vehicle_registration != trip.vehicle_registration:
+            continue
+        return max(0, trip.start_mileage - older.end_mileage)
+    return None
+
+
+def total_unaccounted_km(trips) -> int:
+    return sum(mileage_gap_km(trips, trip) or 0 for trip in trips)
+
 
 def build_report(parser, window_days: Optional[int] = 14) -> DriverReport:
     """Build a report over the trailing `window_days`.

@@ -5,14 +5,18 @@ import json
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
-from tacho_service.updates import (ReleaseStore, UpdateError, _canonical,
-                                    verify_manifest)
+from tacho_core import TripRecord
+from tacho_core.report import mileage_gap_km, total_unaccounted_km
+from tacho_service.config import Config
+from tacho_service.updates import (AUTO_APPLY_DELAY_SECONDS, ReleaseStore,
+                                    UpdateError, _canonical, verify_manifest)
 
 
 def _key_pair():
@@ -34,6 +38,43 @@ def _archive():
 
 
 class UpdateTests(unittest.TestCase):
+    def test_trusted_card_uses_hash_only(self):
+        card_number = "GB 1234 5678 9012 3456"
+        fingerprint = Config.card_hash(card_number)
+        self.assertEqual(len(fingerprint), 64)
+        self.assertNotIn(card_number, fingerprint)
+        config = Config(trusted_card_hash=fingerprint)
+        self.assertTrue(config.card_is_trusted(card_number))
+        self.assertFalse(config.card_is_trusted("GB 0000 0000 0000 0000"))
+
+    def test_mileage_gap_is_previous_truck_odometer_advance(self):
+        older = TripRecord("2026-08-01", "Friday", "AB12", "06:00", "10:00",
+                           1000, 1200, 200, 4.0)
+        newer = TripRecord("2026-08-03", "Sunday", "AB12", "06:00", "10:00",
+                           1300, 1500, 200, 4.0)
+        other_truck = TripRecord("2026-08-02", "Saturday", "XY99", "06:00", "10:00",
+                                 500, 600, 100, 4.0)
+        trips = [newer, other_truck, older]
+        self.assertEqual(mileage_gap_km(trips, newer), 100)
+        self.assertIsNone(mileage_gap_km(trips, other_truck))
+        self.assertEqual(total_unaccounted_km(trips), 100)
+
+    def test_auto_apply_delay_is_visible_and_bounded(self):
+        self.assertEqual(AUTO_APPLY_DELAY_SECONDS, 30)
+        self.assertGreaterEqual(AUTO_APPLY_DELAY_SECONDS, 5)
+
+    def test_countdown_emits_version_and_applies_after_delay(self):
+        from tacho_service.updates import UpdateManager
+
+        states = []
+        manager = UpdateManager(config_fn=lambda: object(), idle_fn=lambda: True,
+                                on_state=lambda state, detail: states.append((state, detail)))
+        manager.apply_staged = lambda: states.append(("APPLY", "called"))
+        with patch("tacho_service.updates.AUTO_APPLY_DELAY_SECONDS", 1):
+            manager._countdown("9.9.9")
+        self.assertEqual(states[0], ("COUNTDOWN", "v9.9.9 auto-update in 1s"))
+        self.assertEqual(states[-1], ("APPLY", "called"))
+
     def test_signed_manifest_and_release_rollback(self):
         private, public = _key_pair()
         archive = _archive()

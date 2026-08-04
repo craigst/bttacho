@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "repository": "craigst/bttacho",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "minimum_version": "0.0.0",
-  "artifact_url": "https://github.com/craigst/bttacho/releases/download/v1.0.1/tacho-1.0.1.tar.gz",
-  "sha256": "8cacaf39719aef502947b40b05537e91a9956f7f5b9a37ad6651cdac4b1e01d2",
-  "expires_at": "2026-08-18T19:26:05.254670+00:00",
-  "signature": "kJJExQX3de9Fu4pi3EjwfJk49gzb_009r_3vf8iezH-iNvvgoX84kUPe7EZNp3--KpTuFghf2MtxJ8G-p3aMCw"
+  "artifact_url": "https://github.com/craigst/bttacho/releases/download/v1.0.2/tacho-1.0.2.tar.gz",
+  "sha256": "d5eb2954cf173c88286c6726ee401bfd9ae8db6465a2f8998f039d7c10ffe364",
+  "expires_at": "2026-08-18T19:45:43.835385+00:00",
+  "signature": "BYxGmDgamTSjSBrFNeDtLKZ-JcupYU_PVju1Ba8_i0N4ToeGoQ4LFG6ZI9dYY5I-hGPNqvO55ReQgldCGBUPDA"
 }
